@@ -5,6 +5,7 @@ import torch.nn as nn
 import torch.nn.functional as F
 import numpy as np
 import gym
+import slimevolleygym
 
 # hyper-parameters
 BATCH_SIZE = 128
@@ -14,21 +15,20 @@ EPISILO = 0.9
 MEMORY_CAPACITY = 20000
 Q_NETWORK_ITERATION = 100
 
-env = gym.make("CartPole-v0")
-env = env.unwrapped
+#env = gym.make("CartPole-v0")
+env = gym.make("SlimeVolley-v0")
+#env = env.unwrapped
 NUM_ACTIONS = env.action_space.n
 NUM_STATES = env.observation_space.shape[0]
-ENV_A_SHAPE = 0 if isinstance(env.action_space.sample(), int) else env.action_space.sample.shape
+ENV_A_SHAPE = env.action_space.sample().shape
+
 class Net(nn.Module):
     """docstring for Net"""
     def __init__(self):
         super(Net, self).__init__()
         self.fc1 = nn.Linear(NUM_STATES, 50)
-        self.fc1.weight.data.normal_(0,0.1)
         self.fc2 = nn.Linear(50,30)
-        self.fc2.weight.data.normal_(0,0.1)
         self.out = nn.Linear(30,NUM_ACTIONS)
-        self.out.weight.data.normal_(0,0.1)
 
     def forward(self,x):
         x = self.fc1(x)
@@ -41,7 +41,6 @@ class Net(nn.Module):
 class DQN():
     """docstring for DQN"""
     def __init__(self):
-        super(DQN, self).__init__()
         self.eval_net, self.target_net = Net(), Net()
 
         self.learn_step_counter = 0
@@ -58,11 +57,12 @@ class DQN():
         if np.random.randn() <= EPISILO:# greedy policy
             action_value = self.eval_net.forward(state)
             action = torch.max(action_value, 1)[1].data.numpy()
-            action = action[0] if ENV_A_SHAPE == 0 else action.reshape(ENV_A_SHAPE)
         else: # random policy
-            action = np.random.randint(0,NUM_ACTIONS)
-            action = action if ENV_A_SHAPE ==0 else action.reshape(ENV_A_SHAPE)
-        return action
+            action = np.random.randint(0, NUM_ACTIONS)
+
+        actout = np.zeros(ENV_A_SHAPE)
+        actout[action] = 1
+        return actout, action
 
 
     def store_transition(self, state, action, reward, next_state):
@@ -105,9 +105,10 @@ def main():
         state = env.reset()
         ep_reward = 0
         while True:
-            env.render()
-            action = dqn.choose_action(state)
-            next_state, reward, done, info = env.step(action)
+            if i % 99 == 0:
+                env.render()
+            actout, action = dqn.choose_action(state)
+            next_state, reward, done, info = env.step(actout)
 
             dqn.store_transition(state, action, reward, next_state)
             ep_reward += reward
